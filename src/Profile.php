@@ -41,10 +41,26 @@ class Profile {
 
     /**
      * Get current user's friends on Unreal Engine.
+     * @param  boolean  Whether to include friend requests and suggestions. False by default.
      * @return array    Array of friends
      */
-    public function getFriends() {
-        $data = FortniteClient::sendUnrealClientGetRequest(FortniteClient::EPIC_FRIENDS_ENDPOINT . $this->account_id, $this->access_token, true);
+    public function getFriends($includePending = false) {
+        $data = FortniteClient::sendUnrealClientGetRequest(FortniteClient::EPIC_FRIENDS_ENDPOINT . $this->account_id .
+            '?includePending=' . ($includePending ? 'true' : 'false'),
+                                                        $this->access_token,
+                                                        true);
+
+        return $data;
+    }
+
+    /**
+     * Remove a friend or decline a friend request on Unreal Engine.
+     * @param string    ID of friend to remove
+     */
+    public function removeFriend($id) {
+        $data = FortniteClient::sendUnrealClientDeleteRequest(FortniteClient::EPIC_FRIENDS_ENDPOINT . $this->account_id . '/' . $id,
+                                                        $this->access_token,
+                                                        new \StdClass());
 
         return $data;
     }

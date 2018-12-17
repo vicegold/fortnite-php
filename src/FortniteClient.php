@@ -95,6 +95,31 @@ class FortniteClient {
     }
 
     /**
+     * Sends a DELETE request as the Unreal Engine Client.
+     * @param  string  $endpoint      API Endpoint to request
+     * @param  string  $authorization Authorization header
+     * @param  boolean $oauth         Is $authorization an OAuth2 token
+     * @return object                 Decoded JSON response body
+     */
+    public static function sendUnrealClientDeleteRequest($endpoint, $authorization = self::EPIC_LAUNCHER_AUTHORIZATION, $oauth = false) {
+        $client = new Client(['http_errors' => false]);
+
+        try {
+            $response = $client->delete($endpoint, [
+                'headers' => [
+                    'User-Agent' => self::UNREAL_CLIENT_USER_AGENT,
+                    'Authorization' => (!$oauth) ? 'basic ' . $authorization : 'bearer ' . $authorization,
+                    'X-Epic-Device-ID' => self::generateDeviceId()
+                ]
+            ]);
+
+            return json_decode($response->getBody()->getContents());
+        } catch (GuzzleException $e) {
+            throw $e; //Throw exception back up to caller
+        }
+    }
+
+    /**
      * Sends a GET request as the Fortnite client.
      * @param  string $endpoint     API endpoint to request
      * @param  string $access_token OAuth2 access token
