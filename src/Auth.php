@@ -1,12 +1,15 @@
 <?php
+
 namespace Fortnite;
 
-use Fortnite\FortniteClient;
-use Fortnite\Profile;
 use Fortnite\Status;
+use Fortnite\Profile;
+use GuzzleHttp\Client;
+use Fortnite\FortniteClient;
 use Fortnite\Exception\TwoFactorAuthRequiredException;
 
-class Auth {
+class Auth
+{
     private $access_token;
     private $in_app_id;
     private $refresh_token;
@@ -26,15 +29,16 @@ class Auth {
      * @param string $account_id    Unreal Engine account id
      * @param string $expires_in    OAuth2 token expiration time
      */
-    private function __construct($access_token, $in_app_id, $refresh_token, $account_id, $expires_in) {
+    private function __construct($access_token, $in_app_id, $refresh_token, $account_id, $expires_in)
+    {
         $this->access_token = $access_token;
         $this->in_app_id = $in_app_id;
         $this->refresh_token = $refresh_token;
         $this->account_id = $account_id;
         $this->expires_in = $expires_in;
-        $this->account = new Account($this->access_token,$this->account_id);
+        $this->account = new Account($this->access_token, $this->account_id);
         $this->status = new Status($this->access_token);
-        if ($this->status->allowedToPlay() === false){
+        if ($this->status->allowedToPlay() === false) {
             $this->account->acceptEULA();
         }
         $this->profile = new Profile($this->access_token, $this->account_id);
@@ -53,7 +57,8 @@ class Auth {
      *
      * @return     self       New Auth instance
      */
-    public static function login($email, $password, $challenge = '', $code = '') {
+    public static function login($email, $password, $challenge = '', $code = '')
+    {
 
         $requestParams = [
             'includePerms' => 'false', // We don't need these here
@@ -63,7 +68,8 @@ class Auth {
         if (empty($challenge) && empty($code)) {
             // Regular login
             $requestParams = array_merge($requestParams, [
-                'grant_type' => 'password',
+                'grant_type' => 'exchange_code',
+                'exchange_code' => 'test',
                 'username' => $email,
                 'password' => $password,
             ]);
@@ -75,8 +81,23 @@ class Auth {
             ]);
         }
 
+        $client = new Client(['cookies' => true]);
+
+        $dataToken = FortniteClient::sendUnrealXSRFClientPostRequest($client);
+
+        $data = FortniteClient::sendUnrealClientLoginRequestPostRequest($client, $dataToken, $email, $password);
+
+        $dataParam = FortniteClient::sendUnrealClientExchangePostRequest($client, $dataToken);
+
+        $requestParams = array_merge($requestParams, [
+            'grant_type' => 'exchange_code',
+            'exchange_code' => $dataParam->code,
+            'includePerms' => 'true',
+            'token_type' => 'eg1',
+        ]);
+
         // First, we need to get a token for the Unreal Engine client
-        $data = FortniteClient::sendUnrealClientPostRequest(FortniteClient::EPIC_OAUTH_TOKEN_ENDPOINT, $requestParams);
+        $data = FortniteClient::sendUnrealClientPostRequest($client, FortniteClient::EPIC_OAUTH_TOKEN_ENDPOINT, $requestParams);
 
         if (!isset($data->access_token)) {
             if ($data->errorCode === 'errors.com.epicgames.common.two_factor_authentication.required') {
@@ -87,14 +108,14 @@ class Auth {
         }
 
         // Now that we've got our Unreal Client launcher token, let's get an exchange token for Fortnite
-        $data = FortniteClient::sendUnrealClientGetRequest(FortniteClient::EPIC_OAUTH_EXCHANGE_ENDPOINT, $data->access_token, true);
+        $data = FortniteClient::sendUnrealClientGetRequest($client, FortniteClient::EPIC_OAUTH_EXCHANGE_ENDPOINT, $data->access_token, true);
 
         if (!isset($data->code)) {
             throw new \Exception($data->errorMessage);
         }
 
         // Should be good. Let's get our tokens for the Fortnite API
-        $data = FortniteClient::sendUnrealClientPostRequest(FortniteClient::EPIC_OAUTH_TOKEN_ENDPOINT, [
+        $data = FortniteClient::sendUnrealClientPostRequest($client, FortniteClient::EPIC_OAUTH_TOKEN_ENDPOINT, [
             'grant_type' => 'exchange_code',
             'exchange_code' => $data->code,
             'includePerms' => false, // We don't need these here
@@ -113,8 +134,9 @@ class Auth {
      * @param  string $refresh_token Exisiting OAuth2 refresh token
      * @return self                New Auth instance
      */
-    public static function refresh($refresh_token) {
-        $data = FortniteClient::sendUnrealClientPostRequest(FortniteClient::EPIC_OAUTH_TOKEN_ENDPOINT, [
+    public static function refresh($refresh_token)
+    {
+        $data = FortniteClient::sendUnrealClientPostRequest($client, FortniteClient::EPIC_OAUTH_TOKEN_ENDPOINT, [
             'grant_type' => 'refresh_token',
             'refresh_token' => $refresh_token,
             'includePerms' => "false", // We don't need these here
@@ -125,14 +147,15 @@ class Auth {
             throw new \Exception($data->errorMessage);
         }
 
-       return new self($data->access_token, $data->in_app_id, $data->refresh_token, $data->account_id, $data->expires_in);
+        return new self($data->access_token, $data->in_app_id, $data->refresh_token, $data->account_id, $data->expires_in);
     }
 
     /**
      * Returns current refresh token.
      * @return string OAuth2 refresh token
      */
-    public function refreshToken() {
+    public function refreshToken()
+    {
         return $this->refresh_token;
     }
 
@@ -140,7 +163,8 @@ class Auth {
      * Returns the time until the OAuth2 access token expires.
      * @return string Time until OAuth2 access token expires (in seconds)
      */
-    public function expiresIn() {
+    public function expiresIn()
+    {
         return $this->expires_in;
     }
 
@@ -148,11 +172,13 @@ class Auth {
      * Returns current access token.
      * @return string OAuth2 access token
      */
-    public function accessToken() {
+    public function accessToken()
+    {
         return $this->access_token;
     }
 
-    public function inAppId() {
+    public function inAppId()
+    {
         return $this->in_app_id;
     }
 }
