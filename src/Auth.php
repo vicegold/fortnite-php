@@ -19,7 +19,6 @@ class Auth
     public $profile;
 
 
-
     // TODO: Probably want to lazy load all of these object initializations. Although currently I'm not sure how to go about that with PHP.
     // @Tustin 7/28/2018
     /**
@@ -80,7 +79,6 @@ class Auth
                 'challenge' => $challenge,
             ]);
         }
-
         $client = new Client(['cookies' => true]);
 
         $dataToken = FortniteClient::sendUnrealXSRFClientPostRequest($client);
@@ -136,6 +134,8 @@ class Auth
      */
     public static function refresh($refresh_token)
     {
+        $client = new Client(['cookies' => true]);
+
         $data = FortniteClient::sendUnrealClientPostRequest($client, FortniteClient::EPIC_OAUTH_TOKEN_ENDPOINT, [
             'grant_type' => 'refresh_token',
             'refresh_token' => $refresh_token,
