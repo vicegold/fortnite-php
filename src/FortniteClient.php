@@ -1,16 +1,25 @@
 <?php
+
 namespace Fortnite;
 
-use GuzzleHttp\Exception\GuzzleException;
 use GuzzleHttp\Client;
+use GuzzleHttp\Exception\GuzzleException;
 
-class FortniteClient {
+class FortniteClient
+{
+    /**
+     * New Endpoints
+     */
+    const CSRF_TOKEN = 'https://www.epicgames.com/id/api/csrf';
+    const API_LOGIN = 'https://www.epicgames.com/id/api/login';
+    const API_EXCHANGE_CODE = 'https://www.epicgames.com/id/api/exchange';
+
     /**
      * base64 encoded string of two MD5 hashes delimited by a colon. The two hashes are the client_id and client_secret OAuth2 fields.
      */
     const EPIC_LAUNCHER_AUTHORIZATION   = "MzQ0NmNkNzI2OTRjNGE0NDg1ZDgxYjc3YWRiYjIxNDE6OTIwOWQ0YTVlMjVhNDU3ZmI5YjA3NDg5ZDMxM2I0MWE=";
 
-    
+
     /**
      * Same as EPIC_LAUNCHER_AUTHORIZATION
      */
@@ -42,7 +51,6 @@ class FortniteClient {
 
 
 
-
     /**
      * Sends a GET request as the Unreal Engine Client.
      * @param  string  $endpoint      API Endpoint to request
@@ -50,9 +58,8 @@ class FortniteClient {
      * @param  boolean $oauth         Is $authorization an OAuth2 token
      * @return object                 Decoded JSON response body
      */
-    public static function sendUnrealClientGetRequest($endpoint, $authorization = self::EPIC_LAUNCHER_AUTHORIZATION, $oauth = false) {
-        $client = new Client();
-
+    public static function sendUnrealClientGetRequest($client, $endpoint, $authorization = self::EPIC_LAUNCHER_AUTHORIZATION, $oauth = false)
+    {
         try {
             $response = $client->get($endpoint, [
                 'headers' => [
@@ -60,7 +67,59 @@ class FortniteClient {
                     'Authorization' => (!$oauth) ? 'basic ' . $authorization : 'bearer ' . $authorization
                 ]
             ]);
-            
+
+            return json_decode($response->getBody()->getContents());
+        } catch (GuzzleException $e) {
+            throw $e; //Throw exception back up to caller
+        }
+    }
+
+    public static function sendUnrealXSRFClientPostRequest($client)
+    {
+        try {
+            $response = $client->get(self::CSRF_TOKEN);
+            $cookieJar = $client->getConfig('cookies');
+            foreach ($cookieJar->toArray() as $item) {
+                if ($item['Name'] == "XSRF-TOKEN") {
+                    $token = $item['Value'];
+                }
+            }
+            return $token;
+        } catch (GuzzleException $e) {
+            throw $e; //Throw exception back up to caller
+        }
+    }
+
+    public static function sendUnrealClientLoginRequestPostRequest($client, $token, $email, $password)
+    {
+        try {
+            $response = $client->post(self::API_LOGIN, [
+                'form_params' => [
+                    'email' => $email,
+                    'password' => $password,
+                    'rememberMe' => 'true'
+                ],
+                'headers' => [
+                    'Content-Type' => 'application/x-www-form-urlencoded',
+                    'x-xsrf-token' => $token,
+                ]
+            ]);
+
+            return json_decode($response->getBody()->getContents());
+        } catch (GuzzleException $e) {
+            throw $e; //Throw exception back up to caller
+        }
+    }
+
+    public static function sendUnrealClientExchangePostRequest($client, $token)
+    {
+        try {
+            $response = $client->get(self::API_EXCHANGE_CODE, [
+                'headers' => [
+                    'x-xsrf-token' => $token,
+                ]
+            ]);
+
             return json_decode($response->getBody()->getContents());
         } catch (GuzzleException $e) {
             throw $e; //Throw exception back up to caller
@@ -75,13 +134,13 @@ class FortniteClient {
      * @param  boolean $oauth         Is $authorization an OAuth2 token
      * @return object                 Decoded JSON response body
      */
-    public static function sendUnrealClientPostRequest($endpoint, $params = null, $authorization = self::EPIC_LAUNCHER_AUTHORIZATION, $oauth = false) {
-        $client = new Client(['http_errors' => false]);
-
+    public static function sendUnrealClientPostRequest($client, $endpoint, $params, $authorization = self::EPIC_LAUNCHER_AUTHORIZATION, $oauth = false)
+    {
         try {
             $response = $client->post($endpoint, [
                 'form_params' => $params,
                 'headers' => [
+                    'Content-Type' => 'application/x-www-form-urlencoded',
                     'User-Agent' => self::UNREAL_CLIENT_USER_AGENT,
                     'Authorization' => (!$oauth) ? 'basic ' . $authorization : 'bearer ' . $authorization,
                     'X-Epic-Device-ID' => self::generateDeviceId()
@@ -126,7 +185,8 @@ class FortniteClient {
      * @param  array  $extra_headers (optional)
      * @return object               Decoded JSON response body
      */
-    public static function sendFortniteGetRequest($endpoint, $access_token, $extra_headers = array()) {
+    public static function sendFortniteGetRequest($endpoint, $access_token, $extra_headers = array())
+    {
         $client = new Client();
 
         $headers = [
@@ -154,11 +214,12 @@ class FortniteClient {
      * @param  array  $params       Request parameters, using the name as the array key and value as the array value
      * @return object               Decoded JSON response body
      */
-    public static function sendFortnitePostRequest($endpoint, $access_token, $params = null) {
+    public static function sendFortnitePostRequest($endpoint, $access_token, $params = null)
+    {
         $client = new Client();
 
         try {
-             $response = $client->post($endpoint, [
+            $response = $client->post($endpoint, [
                 'json' => $params,
                 'headers' => [
                     'User-Agent' => self::FORTNITE_USER_AGENT,
@@ -166,18 +227,19 @@ class FortniteClient {
                 ]
             ]);
 
-            return json_decode($response->getBody()->getContents());      
-        } catch (GuzzleException$e) {
+            return json_decode($response->getBody()->getContents());
+        } catch (GuzzleException $e) {
             throw $e; //Throw exception back up to caller
         }
-
     }
 
-    public static function sendFortniteDeleteRequest($endpoint, $access_token) {
+    public static function sendFortniteDeleteRequest($endpoint, $access_token)
+    {
         $client = new Client();
+        $params = null;
 
         try {
-             $response = $client->delete($endpoint, [
+            $response = $client->delete($endpoint, [
                 'json' => $params,
                 'headers' => [
                     'User-Agent' => self::FORTNITE_USER_AGENT,
@@ -185,23 +247,26 @@ class FortniteClient {
                 ]
             ]);
 
-            return json_decode($response->getBody()->getContents());      
-        } catch (GuzzleException$e) {
+            return json_decode($response->getBody()->getContents());
+        } catch (GuzzleException $e) {
             throw $e; //Throw exception back up to caller
         }
-
     }
 
-    private static function generateSequence($length) {
+    private static function generateSequence($length)
+    {
         return strtoupper((bin2hex(random_bytes($length / 2))));
     }
 
-    public static function generateDeviceId() {
-        return sprintf('%s-%s-%s-%s-%s',
-        self::generateSequence(8), 
-        self::generateSequence(4), 
-        self::generateSequence(4), 
-        self::generateSequence(4), 
-        self::generateSequence(12));
+    public static function generateDeviceId()
+    {
+        return sprintf(
+            '%s-%s-%s-%s-%s',
+            self::generateSequence(8),
+            self::generateSequence(4),
+            self::generateSequence(4),
+            self::generateSequence(4),
+            self::generateSequence(12)
+        );
     }
 }
